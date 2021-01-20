@@ -26,9 +26,14 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executor;
+
+import static android.net.wifi.rtt.RangingResult.STATUS_SUCCESS;
 
 public class MainActivity extends AppCompatActivity {
     private final static String[] WIFI_PERMISSIONS = {
@@ -39,7 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private final int REQUEST_CODE = 1;
     private WifiManager wifiManager;
     private WifiRttManager wifiRttManager;
-    private ArrayList<ScanResult> ftmAPs = new ArrayList<>() ;
+    private ArrayList<ScanResult> ftmAPs = new ArrayList<>();
+    private Timer timer;
+    boolean rangingClicked = false;
 
     @SuppressLint("SetTextI18n")
     @Override
@@ -126,15 +133,16 @@ public class MainActivity extends AppCompatActivity {
         for (ScanResult result : scanResults) {
             if (result.is80211mcResponder()) {
                 ftmAPs.add(result);
-                Toast.makeText(this, "找到FTM接入点:" + result.SSID, Toast.LENGTH_LONG).show();
+//                Toast.makeText(this, "找到FTM接入点:" + result.SSID, Toast.LENGTH_LONG).show();
                 Button rangingButton = findViewById(R.id.buttonRanging);
                 rangingButton.setEnabled(true);
             }
-            Log.d("WIFI SSID:", result.SSID);
-            Log.d("WIFI SCAN:", result.capabilities);
-            Log.d("WIFI centerFreq0:", Integer.toString(result.centerFreq0));
-            Log.d("WIFI channelWidth:", Integer.toString(result.channelWidth));
+//            Log.d("WIFI SSID:", result.SSID);
+//            Log.d("WIFI SCAN:", result.capabilities);
+//            Log.d("WIFI centerFreq0:", Integer.toString(result.centerFreq0));
+//            Log.d("WIFI channelWidth:", Integer.toString(result.channelWidth));
         }
+        Log.e("scanSuccess", "ftm AP number:" + Integer.toString(ftmAPs.size()));
 
 
     }
@@ -150,9 +158,17 @@ public class MainActivity extends AppCompatActivity {
 
     public void onRangingButtonClicked(View view) {
         Button rangingButton = findViewById(R.id.buttonRanging);
-        rangingButton.setEnabled(false);
-        RangingRequest.Builder builder = new RangingRequest.Builder();
-        builder.addAccessPoints(ftmAPs);
+
+        if (!rangingClicked) {
+            rangingButton.setText("停止");
+            timer = new Timer();
+            rangingClicked = true;
+        } else {
+            rangingButton.setText("执行测距");
+            rangingClicked = false;
+        }
+
+
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
@@ -162,23 +178,66 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        Toast.makeText(this, "开始执行测距请求", Toast.LENGTH_SHORT).show();
-        RangingRequest req = builder.build();
-        Executor executor = new DirectExecutor();
-        wifiRttManager.startRanging(req, executor, new RangingResultCallback() {
+        //Toast.makeText(this, "开始执行测距请求", Toast.LENGTH_SHORT).show();
 
-            @Override
-            public void onRangingFailure(int code) {
-                Log.d("onRangingFailure", "Fail in ranging:" + Integer.toString(code));
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "测距请求失败", Toast.LENGTH_SHORT).show());
-            }
 
+        TimerTask task = new TimerTask() {
             @Override
-            public void onRangingResults(List<RangingResult> results) {
-                Log.d("onRangingResults", "Success in ranging:");
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "测距请求成功", Toast.LENGTH_SHORT).show());
+            public void run() {
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+                RangingRequest.Builder builder = new RangingRequest.Builder();
+                builder.addAccessPoints(ftmAPs);
+                RangingRequest req = builder.build();
+                Executor executor = new DirectExecutor();
+                wifiRttManager.startRanging(req, executor, new RangingResultCallback() {
+                    @Override
+                    public void onRangingFailure(int code) {
+                        Log.d("onRangingFailure", "Fail in ranging:" + Integer.toString(code));
+                        runOnUiThread(() -> {
+                            Toast.makeText(MainActivity.this, "测距请求失败", Toast.LENGTH_SHORT).show();
+
+                        });
+
+                    }
+
+                    @Override
+                    public void onRangingResults(List<RangingResult> results) {
+                        Log.d("onRangingResults", "Success in ranging:");
+                        runOnUiThread(() ->
+                        {
+                            //Toast.makeText(MainActivity.this, "测距请求成功", Toast.LENGTH_SHORT).show();
+                            TextView textView = findViewById(R.id.resultTextView);
+                            StringBuilder resultString = new StringBuilder();
+                            for (RangingResult result : results) {
+                                if (result.getStatus() == STATUS_SUCCESS) {
+                                    resultString.append(result.getMacAddress().toString());
+                                    resultString.append("|");
+                                    resultString.append(result.getDistanceMm());
+                                    resultString.append("mm");
+                                    resultString.append("\n");
+                                } else {
+                                    resultString.append(result.getMacAddress().toString());
+                                    resultString.append("|");
+                                    resultString.append("error");
+                                    resultString.append("\n");
+                                }
+                            }
+                            textView.setText(resultString.toString());
+
+                        });
+
+                    }
+                });
             }
-        });
+        };
+        if (rangingClicked) {
+            timer.schedule(task, 0, 100);
+        } else {
+            timer.cancel();
+        }
+
     }
 
 }
