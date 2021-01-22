@@ -167,7 +167,20 @@ public class MainActivity extends AppCompatActivity {
         rttResultManager.updateAPs(getApplicationContext(), ftmAPs);
     }
 
-    ;
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        timer.cancel();
+        Button rangingButton = findViewById(R.id.buttonRanging);
+        rangingButton.setText("执行测距");
+        rangingClicked = false;
+    }
 
     private void scanFailure() {
         // handle failure: new scan did NOT succeed
@@ -180,11 +193,11 @@ public class MainActivity extends AppCompatActivity {
         Button rangingButton = findViewById(R.id.buttonRanging);
 
         if (!rangingClicked) {
-            rangingButton.setText("停止");
+            rangingButton.setText(R.string.stop);
             timer = new Timer();
             rangingClicked = true;
         } else {
-            rangingButton.setText("执行测距");
+            rangingButton.setText(R.string.ranging);
             rangingClicked = false;
         }
         class DirectExecutor implements Executor {
