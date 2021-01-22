@@ -23,8 +23,12 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.example.wifiscanjava.scan.RttResultManager;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,7 +37,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executor;
 
-import static android.net.wifi.rtt.RangingResult.STATUS_SUCCESS;
 
 public class MainActivity extends AppCompatActivity {
     private final static String[] WIFI_PERMISSIONS = {
@@ -47,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<ScanResult> ftmAPs = new ArrayList<>();
     private Timer timer;
     boolean rangingClicked = false;
+    private RttResultManager rttResultManager = new RttResultManager();
 
     @SuppressLint("SetTextI18n")
     @Override
@@ -64,6 +68,23 @@ public class MainActivity extends AppCompatActivity {
             textView.setText("设备不具有WiFi RTT支持");
         }
         myRequestPermission();
+
+        // Add table header
+        TableLayout table = findViewById(R.id.table);
+        table.setStretchAllColumns(true);
+        TableRow row = new TableRow(getApplicationContext());
+        TextView macAddressView = new TextView(getApplicationContext());
+        TextView distanceView = new TextView(getApplicationContext());
+        TextView rssiView = new TextView(getApplicationContext());
+        macAddressView.setText("MAC");
+        rssiView.setText("RSSI");
+        distanceView.setText("Distance");
+
+        row.addView(macAddressView);
+        row.addView(rssiView);
+        row.addView(distanceView);
+        table.addView(row);
+
     }
 
     private void myRequestPermission() {
@@ -143,8 +164,7 @@ public class MainActivity extends AppCompatActivity {
 //            Log.d("WIFI channelWidth:", Integer.toString(result.channelWidth));
         }
         Log.e("scanSuccess", "ftm AP number:" + Integer.toString(ftmAPs.size()));
-
-
+        rttResultManager.updateAPs(getApplicationContext(), ftmAPs);
     }
 
     ;
@@ -166,11 +186,6 @@ public class MainActivity extends AppCompatActivity {
         } else {
             rangingButton.setText("执行测距");
             rangingClicked = false;
-        }
-
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
         }
         class DirectExecutor implements Executor {
             public void execute(Runnable r) {
@@ -199,7 +214,6 @@ public class MainActivity extends AppCompatActivity {
                             Toast.makeText(MainActivity.this, "测距请求失败", Toast.LENGTH_SHORT).show();
 
                         });
-
                     }
 
                     @Override
@@ -207,27 +221,14 @@ public class MainActivity extends AppCompatActivity {
                         Log.d("onRangingResults", "Success in ranging:");
                         runOnUiThread(() ->
                         {
-                            //Toast.makeText(MainActivity.this, "测距请求成功", Toast.LENGTH_SHORT).show();
-                            TextView textView = findViewById(R.id.resultTextView);
-                            StringBuilder resultString = new StringBuilder();
-                            for (RangingResult result : results) {
-                                if (result.getStatus() == STATUS_SUCCESS) {
-                                    resultString.append(result.getMacAddress().toString());
-                                    resultString.append("|");
-                                    resultString.append(result.getDistanceMm());
-                                    resultString.append("mm");
-                                    resultString.append("\n");
-                                } else {
-                                    resultString.append(result.getMacAddress().toString());
-                                    resultString.append("|");
-                                    resultString.append("error");
-                                    resultString.append("\n");
-                                }
+                            rttResultManager.processResult(results);
+                            TableLayout table = findViewById(R.id.table);
+                            // TODO: only update activate APs
+                            table.removeViews(1, table.getChildCount() - 1);
+                            for (TableRow row : rttResultManager.rows) {
+                                table.addView(row);
                             }
-                            textView.setText(resultString.toString());
-
                         });
-
                     }
                 });
             }
